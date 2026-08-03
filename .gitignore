@@ -1,0 +1,26 @@
+# Built files
+*.apk
+*.aab
+/build/
+/app/build/
+
+# Signing
+*.jks
+*.keystore
+signing.properties
+
+# Local config
+local.properties
+
+# IDE
+.idea/
+*.iml
+.gradle/
+.kotlin/
+
+# Room schema exports
+/app/schemas/
+
+# OS junk
+.DS_Store
+Thumbs.db
