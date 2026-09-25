@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.workout.tracker.domain.model.WalkingLog
 import com.workout.tracker.domain.repository.WorkoutRepository
+import com.workout.tracker.ui.util.toInputString
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +47,7 @@ class WalkingViewModel @Inject constructor(
     fun onMilesChange(value: String) {
         if (isConverting) return
         isConverting = true
-        val km = value.toDoubleOrNull()?.let { "%.2f".format(it * 1.60934) } ?: ""
+        val km = value.toDoubleOrNull()?.let { (it * KM_PER_MILE).toInputString(2) } ?: ""
         _uiState.update { it.copy(miles = value, km = km, errorMessage = null) }
         isConverting = false
     }
@@ -54,7 +55,7 @@ class WalkingViewModel @Inject constructor(
     fun onKmChange(value: String) {
         if (isConverting) return
         isConverting = true
-        val miles = value.toDoubleOrNull()?.let { "%.2f".format(it / 1.60934) } ?: ""
+        val miles = value.toDoubleOrNull()?.let { (it / KM_PER_MILE).toInputString(2) } ?: ""
         _uiState.update { it.copy(km = value, miles = miles, errorMessage = null) }
         isConverting = false
     }
@@ -87,7 +88,7 @@ class WalkingViewModel @Inject constructor(
             repository.insertWalkingLog(
                 WalkingLog(
                     distanceMiles = miles!!,
-                    distanceKm = km ?: (miles * 1.60934),
+                    distanceKm = km ?: (miles * KM_PER_MILE),
                     durationSeconds = totalSecs,
                     notes = s.notes.ifBlank { null },
                 ),
@@ -106,5 +107,9 @@ class WalkingViewModel @Inject constructor(
 
     fun deleteLog(log: WalkingLog) {
         viewModelScope.launch { repository.deleteWalkingLog(log) }
+    }
+
+    companion object {
+        private const val KM_PER_MILE = 1.60934
     }
 }

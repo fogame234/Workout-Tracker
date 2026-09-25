@@ -17,8 +17,8 @@ import java.util.Calendar
 import java.util.TimeZone
 import javax.inject.Inject
 
+/** Comparison windows for the trend badge. No single-day option: one day has nothing to compare against. */
 enum class TimePeriod(val label: String, val calendarField: Int, val amount: Int) {
-    TODAY("Today", Calendar.DAY_OF_MONTH, 0),
     WEEK("Week", Calendar.WEEK_OF_YEAR, -1),
     MONTH("Month", Calendar.MONTH, -1),
     THREE_MONTHS("3 Months", Calendar.MONTH, -3),
@@ -35,7 +35,7 @@ data class ExerciseTile(
 )
 
 data class OverviewUiState(
-    val selectedPeriod: TimePeriod = TimePeriod.MONTH,
+    val selectedPeriod: TimePeriod = TimePeriod.WEEK,
     val weightTiles: List<ExerciseTile> = emptyList(),
     val timedTiles: List<ExerciseTile> = emptyList(),
     val cardioTiles: List<ExerciseTile> = emptyList(),
@@ -197,18 +197,10 @@ class OverviewViewModel @Inject constructor(
         return "$sign${"%.1f".format(pct)}%"
     }
 
-    private fun periodStartTimestamp(period: TimePeriod): Long {
-        val cal = Calendar.getInstance(TimeZone.getDefault())
-        if (period == TimePeriod.TODAY) {
-            cal.set(Calendar.HOUR_OF_DAY, 0)
-            cal.set(Calendar.MINUTE, 0)
-            cal.set(Calendar.SECOND, 0)
-            cal.set(Calendar.MILLISECOND, 0)
-        } else {
-            cal.add(period.calendarField, period.amount)
-        }
-        return cal.timeInMillis
-    }
+    private fun periodStartTimestamp(period: TimePeriod): Long =
+        Calendar.getInstance(TimeZone.getDefault())
+            .apply { add(period.calendarField, period.amount) }
+            .timeInMillis
 
     private fun buildWalkingTiles(logs: List<WalkingLog>, periodStart: Long): List<ExerciseTile> {
         if (logs.isEmpty()) {

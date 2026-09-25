@@ -8,6 +8,7 @@ import com.workout.tracker.domain.model.Exercise
 import com.workout.tracker.domain.model.ExerciseLog
 import com.workout.tracker.domain.model.ExerciseType
 import com.workout.tracker.domain.repository.WorkoutRepository
+import com.workout.tracker.ui.util.toInputString
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,14 +52,14 @@ class LogExerciseViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     exercise = exercise,
-                    weight = lastLog?.weightLbs?.let { "%.1f".format(it) } ?: "",
+                    weight = lastLog?.weightLbs?.toInputString(1) ?: "",
                     repsPerSet = "",
                     setsCompleted = lastLog?.setsCompleted ?: exercise.defaultSets,
                     durationMinutes = lastLog?.durationSeconds?.let { (it / 60).toString() }
                         ?: exercise.defaultDurationSeconds?.let { (it / 60).toString() } ?: "",
                     durationSeconds = lastLog?.durationSeconds?.let { (it % 60).toString() }
                         ?: exercise.defaultDurationSeconds?.let { (it % 60).toString() } ?: "",
-                    distanceMiles = lastLog?.distanceMiles?.let { "%.2f".format(it) } ?: "",
+                    distanceMiles = lastLog?.distanceMiles?.toInputString(2) ?: "",
                     difficulty = lastLog?.difficulty?.let {
                         try { DifficultyLevel.valueOf(it) } catch (_: Exception) { null }
                     },

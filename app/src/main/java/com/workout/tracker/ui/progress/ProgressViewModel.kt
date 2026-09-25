@@ -50,12 +50,12 @@ class ProgressViewModel @Inject constructor(
     val uiState: StateFlow<ProgressUiState> = _uiState.asStateFlow()
 
     init {
+        // Resolve the metric before collecting logs, or the first chart renders empty.
         viewModelScope.launch {
             val ex = repository.getExerciseById(exerciseId) ?: return@launch
             val metrics = metricsFor(ex.exerciseType)
             _uiState.update { it.copy(exercise = ex, metrics = metrics, selectedMetric = metrics.firstOrNull()) }
-        }
-        viewModelScope.launch {
+
             repository.getLogsForExercise(exerciseId).collect { logs ->
                 _uiState.update { s ->
                     val data = chart(logs, s.selectedMetric)

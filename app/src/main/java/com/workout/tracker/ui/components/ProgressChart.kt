@@ -31,6 +31,8 @@ fun ProgressChart(
     lineColor: Color = MaterialTheme.colorScheme.primary,
     gridColor: Color = MaterialTheme.colorScheme.outlineVariant,
     labelColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    // Punched-out centre of each dot; follows the surface so it works in dark mode.
+    dotFillColor: Color = MaterialTheme.colorScheme.surface,
 ) {
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 10.sp, color = labelColor)
@@ -72,7 +74,7 @@ fun ProgressChart(
             val pt = dataPoints.first()
             val center = Offset(w / 2f, h / 2f)
             drawCircle(lineColor, 7f, center)
-            drawCircle(Color.White, 4f, center)
+            drawCircle(dotFillColor, 4f, center)
 
             val valueTxt = if (pt.value == pt.value.toLong().toFloat()) pt.value.toLong().toString()
                            else "%.1f".format(pt.value)
@@ -98,7 +100,7 @@ fun ProgressChart(
             // Dots
             coords.forEach { o ->
                 drawCircle(lineColor, 5f, o)
-                drawCircle(Color.White, 3f, o)
+                drawCircle(dotFillColor, 3f, o)
             }
 
             // X labels

@@ -14,9 +14,15 @@ interface WorkoutRepository {
 
     suspend fun getAllExercises(): List<Exercise>
 
+    fun getAllExercisesFlow(): Flow<List<Exercise>>
+
     suspend fun getExerciseById(id: Long): Exercise?
 
     fun getLogsForExercise(exerciseId: Long): Flow<List<ExerciseLog>>
+
+    fun getLogsForExercises(exerciseIds: List<Long>): Flow<List<ExerciseLog>>
+
+    fun getAllLogsFlow(): Flow<List<ExerciseLog>>
 
     suspend fun getAllLogsForExercise(exerciseId: Long): List<ExerciseLog>
 

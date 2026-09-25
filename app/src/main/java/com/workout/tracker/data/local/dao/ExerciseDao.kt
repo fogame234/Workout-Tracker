@@ -16,6 +16,9 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises ORDER BY workoutDayId ASC, orderIndex ASC")
     suspend fun getAll(): List<ExerciseEntity>
 
+    @Query("SELECT * FROM exercises ORDER BY workoutDayId ASC, orderIndex ASC")
+    fun getAllFlow(): Flow<List<ExerciseEntity>>
+
     @Query("SELECT * FROM exercises WHERE id = :id")
     suspend fun getById(id: Long): ExerciseEntity?
 

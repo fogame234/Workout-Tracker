@@ -1,5 +1,7 @@
 package com.workout.tracker.data.backup
 
+import androidx.room.withTransaction
+import com.workout.tracker.data.local.WorkoutDatabase
 import com.workout.tracker.data.local.dao.ExerciseDao
 import com.workout.tracker.data.local.dao.ExerciseLogDao
 import com.workout.tracker.data.local.dao.WalkingLogDao
@@ -8,13 +10,27 @@ import com.workout.tracker.data.local.entity.ExerciseEntity
 import com.workout.tracker.data.local.entity.ExerciseLogEntity
 import com.workout.tracker.data.local.entity.WalkingLogEntity
 import com.workout.tracker.data.local.entity.WorkoutDayEntity
+import com.workout.tracker.domain.model.ExerciseType
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Validated contents of a backup file, parsed before anything is written. */
+data class BackupBundle(
+    val version: Int,
+    val exportDate: Long,
+    val days: List<WorkoutDayEntity>,
+    val exercises: List<ExerciseEntity>,
+    val exerciseLogs: List<ExerciseLogEntity>,
+    val walkingLogs: List<WalkingLogEntity>,
+) {
+    val entryCount: Int get() = exerciseLogs.size + walkingLogs.size
+}
+
 @Singleton
 class BackupManager @Inject constructor(
+    private val db: WorkoutDatabase,
     private val dayDao: WorkoutDayDao,
     private val exerciseDao: ExerciseDao,
     private val exerciseLogDao: ExerciseLogDao,
@@ -23,7 +39,7 @@ class BackupManager @Inject constructor(
 
     suspend fun exportToJson(): String {
         val root = JSONObject()
-        root.put("version", 1)
+        root.put("version", BACKUP_VERSION)
         root.put("exportDate", System.currentTimeMillis())
 
         // Workout days
@@ -90,20 +106,16 @@ class BackupManager @Inject constructor(
         return root.toString(2)
     }
 
-    suspend fun importFromJson(json: String): Result<Int> = try {
+    /** Parses and validates [json]. Never touches the database. */
+    fun parse(json: String): BackupBundle {
         val root = JSONObject(json)
+
         val version = root.optInt("version", 1)
+        require(version in 1..BACKUP_VERSION) {
+            "This backup was made by a newer version of the app (format $version)."
+        }
 
-        // Clear all tables (exercise_logs and walking_logs first due to foreign keys)
-        exerciseLogDao.clearAll()
-        walkingLogDao.clearAll()
-        exerciseDao.clearAll()
-        dayDao.clearAll()
-
-        // Import workout days
-        val days = root.getJSONArray("workoutDays")
-        val dayEntities = (0 until days.length()).map { i ->
-            val d = days.getJSONObject(i)
+        val days = root.getJSONArray("workoutDays").map { d ->
             WorkoutDayEntity(
                 id = d.getLong("id"),
                 dayNumber = d.getInt("dayNumber"),
@@ -111,79 +123,105 @@ class BackupManager @Inject constructor(
                 subtitle = d.getString("subtitle"),
             )
         }
-        dayDao.insertAll(dayEntities)
 
-        // Import exercises
-        val exercises = root.getJSONArray("exercises")
-        val exerciseEntities = (0 until exercises.length()).map { i ->
-            val e = exercises.getJSONObject(i)
+        val exercises = root.getJSONArray("exercises").map { e ->
+            val type = e.getString("exerciseType")
+            require(ExerciseType.entries.any { it.name == type }) {
+                "Unknown exercise type: $type"
+            }
             ExerciseEntity(
                 id = e.getLong("id"),
                 workoutDayId = e.getLong("workoutDayId"),
                 name = e.getString("name"),
                 category = e.getString("category"),
-                exerciseType = e.getString("exerciseType"),
-                defaultSets = e.optNullInt("defaultSets"),
-                defaultReps = e.optNullString("defaultReps"),
-                defaultDurationSeconds = e.optNullInt("defaultDurationSeconds"),
+                exerciseType = type,
+                defaultSets = e.nullableInt("defaultSets"),
+                defaultReps = e.nullableString("defaultReps"),
+                defaultDurationSeconds = e.nullableInt("defaultDurationSeconds"),
                 orderIndex = e.getInt("orderIndex"),
             )
         }
-        exerciseDao.insertAll(exerciseEntities)
 
-        // Import exercise logs
-        val logs = root.getJSONArray("exerciseLogs")
-        var count = 0
-        for (i in 0 until logs.length()) {
-            val l = logs.getJSONObject(i)
-            exerciseLogDao.insert(
-                ExerciseLogEntity(
-                    id = l.getLong("id"),
-                    exerciseId = l.getLong("exerciseId"),
-                    dateTimestamp = l.getLong("dateTimestamp"),
-                    weightLbs = l.optNullDouble("weightLbs"),
-                    setsCompleted = l.optNullInt("setsCompleted"),
-                    repsPerSet = l.optNullInt("repsPerSet"),
-                    durationSeconds = l.optNullLong("durationSeconds"),
-                    distanceMiles = l.optNullDouble("distanceMiles"),
-                    difficulty = l.optNullString("difficulty"),
-                    notes = l.optNullString("notes"),
-                ),
+        val exerciseLogs = root.getJSONArray("exerciseLogs").map { l ->
+            ExerciseLogEntity(
+                id = l.getLong("id"),
+                exerciseId = l.getLong("exerciseId"),
+                dateTimestamp = l.getLong("dateTimestamp"),
+                weightLbs = l.nullableDouble("weightLbs"),
+                setsCompleted = l.nullableInt("setsCompleted"),
+                repsPerSet = l.nullableInt("repsPerSet"),
+                durationSeconds = l.nullableLong("durationSeconds"),
+                distanceMiles = l.nullableDouble("distanceMiles"),
+                difficulty = l.nullableString("difficulty"),
+                notes = l.nullableString("notes"),
             )
-            count++
         }
 
-        // Import walking logs
-        val walks = root.getJSONArray("walkingLogs")
-        val walkEntities = (0 until walks.length()).map { i ->
-            val w = walks.getJSONObject(i)
+        val walkingLogs = root.getJSONArray("walkingLogs").map { w ->
             WalkingLogEntity(
                 id = w.getLong("id"),
                 dateTimestamp = w.getLong("dateTimestamp"),
                 distanceMiles = w.getDouble("distanceMiles"),
                 distanceKm = w.getDouble("distanceKm"),
                 durationSeconds = w.getLong("durationSeconds"),
-                notes = w.optNullString("notes"),
+                notes = w.nullableString("notes"),
             )
         }
-        walkingLogDao.insertAll(walkEntities)
-        count += walkEntities.size
 
-        Result.success(count)
-    } catch (e: Exception) {
-        Result.failure(e)
+        // Checked here so restore cannot fail part-way through.
+        val dayIds = days.mapTo(HashSet()) { it.id }
+        exercises.firstOrNull { it.workoutDayId !in dayIds }?.let {
+            throw IllegalArgumentException("Exercise ${it.name} refers to a missing workout day.")
+        }
+        val exerciseIds = exercises.mapTo(HashSet()) { it.id }
+        exerciseLogs.firstOrNull { it.exerciseId !in exerciseIds }?.let {
+            throw IllegalArgumentException("A logged entry refers to a missing exercise.")
+        }
+
+        return BackupBundle(
+            version = version,
+            exportDate = root.optLong("exportDate", 0L),
+            days = days,
+            exercises = exercises,
+            exerciseLogs = exerciseLogs,
+            walkingLogs = walkingLogs,
+        )
     }
 
+    /** Replaces all stored data with [bundle] in one transaction. */
+    suspend fun restore(bundle: BackupBundle): Int = db.withTransaction {
+        // Children first, to respect the foreign keys.
+        exerciseLogDao.clearAll()
+        walkingLogDao.clearAll()
+        exerciseDao.clearAll()
+        dayDao.clearAll()
+
+        dayDao.insertAll(bundle.days)
+        exerciseDao.insertAll(bundle.exercises)
+        exerciseLogDao.insertAll(bundle.exerciseLogs)
+        walkingLogDao.insertAll(bundle.walkingLogs)
+
+        bundle.entryCount
+    }
+
+    suspend fun importFromJson(json: String): Result<Int> = runCatching { restore(parse(json)) }
+
+    private inline fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =
+        (0 until length()).map { transform(getJSONObject(it)) }
+
     // Extension helpers for nullable JSON fields
-    private fun JSONObject.optNullInt(key: String): Int? =
-        if (isNull(key)) null else optInt(key)
+    private fun JSONObject.nullableInt(key: String): Int? = if (isNull(key)) null else getInt(key)
 
-    private fun JSONObject.optNullLong(key: String): Long? =
-        if (isNull(key)) null else optLong(key)
+    private fun JSONObject.nullableLong(key: String): Long? = if (isNull(key)) null else getLong(key)
 
-    private fun JSONObject.optNullDouble(key: String): Double? =
-        if (isNull(key)) null else optDouble(key)
+    private fun JSONObject.nullableDouble(key: String): Double? =
+        if (isNull(key)) null else getDouble(key)
 
-    private fun JSONObject.optNullString(key: String): String? =
-        if (isNull(key)) null else optString(key)
+    private fun JSONObject.nullableString(key: String): String? =
+        if (isNull(key)) null else getString(key)
+
+    companion object {
+        /** Highest backup format this build can read. Bump when the shape changes. */
+        const val BACKUP_VERSION = 1
+    }
 }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Painted before Compose draws its first frame; kept in step with colorScheme.background. -->
+    <color name="window_background">@android:color/system_surface_light</color>
+</resources>

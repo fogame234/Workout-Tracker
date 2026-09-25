@@ -38,6 +38,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
+
+/** Just past the navigation transition, so a stats reload never lands mid-animation. */
+private const val STATS_REFRESH_SETTLE_MS = 350L
 
 @Composable
 fun OverviewScreen(
@@ -47,7 +51,11 @@ fun OverviewScreen(
     modifier: Modifier = Modifier,
     viewModel: OverviewViewModel = hiltViewModel(),
 ) {
-    LaunchedEffect(refreshTrigger) { viewModel.refresh() }
+    LaunchedEffect(refreshTrigger) {
+        // Let the navigation animation finish first; the stats rebuild drops frames.
+        delay(STATS_REFRESH_SETTLE_MS)
+        viewModel.refresh()
+    }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -63,6 +71,13 @@ fun OverviewScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item(key = "session") {
+            SessionSummaryCard(
+                onExerciseClick = onExerciseClick,
+                onWalkingClick = onWalkingProgressClick,
+            )
+        }
+
         // Time period chips
         item(key = "period") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,7 +141,7 @@ fun OverviewScreen(
                 item(key = "wk_row_$idx") {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         pair.forEach { tile ->
-                            MetricTile(tile, { onWalkingProgressClick() }, Modifier.weight(1f))
+                            MetricTile(tile, onWalkingProgressClick, Modifier.weight(1f))
                         }
                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
@@ -154,7 +169,12 @@ private fun SectionHeader(icon: ImageVector, title: String) {
 private fun TileRow(tiles: List<ExerciseTile>, onClick: (Long) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         tiles.forEach { tile ->
-            MetricTile(tile, onClick, Modifier.weight(1f))
+            val exerciseId = tile.exerciseIds.firstOrNull()
+            MetricTile(
+                tile = tile,
+                onClick = { exerciseId?.let(onClick) },
+                modifier = Modifier.weight(1f),
+            )
         }
         if (tiles.size == 1) {
             Spacer(Modifier.weight(1f))
@@ -165,7 +185,7 @@ private fun TileRow(tiles: List<ExerciseTile>, onClick: (Long) -> Unit) {
 @Composable
 private fun MetricTile(
     tile: ExerciseTile,
-    onClick: (Long) -> Unit,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val bgColor = if (tile.hasData) MaterialTheme.colorScheme.surfaceVariant
@@ -176,7 +196,7 @@ private fun MetricTile(
     Card(
         modifier = modifier
             .height(110.dp)
-            .clickable { onClick(tile.exerciseIds.first()) },
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = bgColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {

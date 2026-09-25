@@ -14,6 +14,9 @@ interface ExerciseLogDao {
     @Query("SELECT * FROM exercise_logs WHERE exerciseId = :exerciseId ORDER BY dateTimestamp ASC")
     fun getForExercise(exerciseId: Long): Flow<List<ExerciseLogEntity>>
 
+    @Query("SELECT * FROM exercise_logs WHERE exerciseId IN (:exerciseIds) ORDER BY dateTimestamp ASC")
+    fun getForExercises(exerciseIds: List<Long>): Flow<List<ExerciseLogEntity>>
+
     @Query("SELECT * FROM exercise_logs WHERE exerciseId = :exerciseId ORDER BY dateTimestamp ASC")
     suspend fun getAllForExercise(exerciseId: Long): List<ExerciseLogEntity>
 
@@ -29,6 +32,9 @@ interface ExerciseLogDao {
     @Query("SELECT * FROM exercise_logs ORDER BY dateTimestamp ASC")
     suspend fun getAll(): List<ExerciseLogEntity>
 
+    @Query("SELECT * FROM exercise_logs ORDER BY dateTimestamp ASC")
+    fun getAllFlow(): Flow<List<ExerciseLogEntity>>
+
     @Query("DELETE FROM exercise_logs")
     suspend fun clearAll()
 
@@ -37,6 +43,9 @@ interface ExerciseLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: ExerciseLogEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(logs: List<ExerciseLogEntity>)
 
     @Delete
     suspend fun delete(log: ExerciseLogEntity)

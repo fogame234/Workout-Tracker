@@ -38,8 +38,17 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun getAllExercises(): List<Exercise> =
         exerciseDao.getAll().map { it.toDomain() }
 
+    override fun getAllExercisesFlow(): Flow<List<Exercise>> =
+        exerciseDao.getAllFlow().map { entities -> entities.map { it.toDomain() } }
+
     override fun getLogsForExercise(exerciseId: Long): Flow<List<ExerciseLog>> =
         logDao.getForExercise(exerciseId).map { entities -> entities.map { it.toDomain() } }
+
+    override fun getLogsForExercises(exerciseIds: List<Long>): Flow<List<ExerciseLog>> =
+        logDao.getForExercises(exerciseIds).map { entities -> entities.map { it.toDomain() } }
+
+    override fun getAllLogsFlow(): Flow<List<ExerciseLog>> =
+        logDao.getAllFlow().map { entities -> entities.map { it.toDomain() } }
 
     override suspend fun getAllLogsForExercise(exerciseId: Long): List<ExerciseLog> =
         logDao.getAllForExercise(exerciseId).map { it.toDomain() }

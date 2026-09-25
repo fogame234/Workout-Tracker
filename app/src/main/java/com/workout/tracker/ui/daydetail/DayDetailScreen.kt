@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,9 @@ fun DayDetailScreen(
     viewModel: DayDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Built once: SimpleDateFormat is costly and there is one card per exercise.
+    val dateFormat = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
 
     Scaffold(
         topBar = {
@@ -92,6 +96,7 @@ fun DayDetailScreen(
                 items(exercises, key = { it.exercise.id }) { item ->
                     ExerciseCard(
                         item = item,
+                        dateFormat = dateFormat,
                         onLogClick = { onLogExercise(item.exercise.id) },
                         onProgressClick = { onViewProgress(item.exercise.id) },
                     )
@@ -104,11 +109,11 @@ fun DayDetailScreen(
 @Composable
 private fun ExerciseCard(
     item: ExerciseWithLastLog,
+    dateFormat: SimpleDateFormat,
     onLogClick: () -> Unit,
     onProgressClick: () -> Unit,
 ) {
     val exercise = item.exercise
-    val dateFormat = SimpleDateFormat("MMM d", Locale.getDefault())
     val icon = when (exercise.exerciseType) {
         ExerciseType.WEIGHTED -> Icons.Default.FitnessCenter
         ExerciseType.TIMED -> Icons.Default.Timer

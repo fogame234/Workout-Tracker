@@ -8,9 +8,14 @@ import com.workout.tracker.domain.model.ExerciseLog
 import com.workout.tracker.domain.model.WorkoutDay
 import com.workout.tracker.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,16 +44,8 @@ class DayDetailViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            repository.getExercisesForDay(dayId).collect { exercises ->
-                val withLogs = exercises.map { exercise ->
-                    ExerciseWithLastLog(
-                        exercise = exercise,
-                        lastLog = repository.getLatestLogForExercise(exercise.id),
-                    )
-                }
-                _uiState.update {
-                    it.copy(exercises = withLogs, isLoading = false)
-                }
+            exercisesWithLatestLogs().collect { exercises ->
+                _uiState.update { it.copy(exercises = exercises, isLoading = false) }
             }
         }
         viewModelScope.launch {
@@ -58,4 +55,22 @@ class DayDetailViewModel @Inject constructor(
             }
         }
     }
+
+    /** Exercises for the day with their latest log, flowing so it updates on write. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun exercisesWithLatestLogs(): Flow<List<ExerciseWithLastLog>> =
+        repository.getExercisesForDay(dayId)
+            .flatMapLatest { exercises ->
+                repository.getLogsForExercises(exercises.map { it.id })
+                    .map { logs ->
+                        val latestByExercise = logs
+                            .groupBy { it.exerciseId }
+                            .mapValues { (_, forExercise) ->
+                                forExercise.maxByOrNull { it.dateTimestamp }
+                            }
+                        exercises.map { ExerciseWithLastLog(it, latestByExercise[it.id]) }
+                    }
+                    // Show the cards on the first query rather than waiting for the logs.
+                    .onStart { emit(exercises.map { ExerciseWithLastLog(it) }) }
+            }
 }

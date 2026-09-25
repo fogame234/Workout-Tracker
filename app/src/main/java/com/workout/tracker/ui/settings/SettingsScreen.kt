@@ -1,21 +1,25 @@
 package com.workout.tracker.ui.settings
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,15 +29,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.workout.tracker.data.backup.BackupBundle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,7 +51,6 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val context = LocalContext.current
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let {
@@ -58,12 +63,7 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri: Uri? ->
-        if (uri != null && uiState.exportJson != null) {
-            val success = writeToUri(context, uri, uiState.exportJson!!)
-            if (success) viewModel.onExportWritten() else viewModel.onExportFailed()
-        } else {
-            viewModel.onExportFailed()
-        }
+        if (uri != null) viewModel.writeExportTo(uri) else viewModel.cancelExport()
     }
 
     // Watch for export data ready -> open file picker
@@ -74,22 +74,24 @@ fun SettingsScreen(
         }
     }
 
-    // File picker to read import
+    // File picker to read import. Nothing is written until the user confirms.
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
-        if (uri != null) {
-            val json = readFromUri(context, uri)
-            if (json != null) viewModel.importFromJson(json)
-        }
+        if (uri != null) viewModel.onImportFileSelected(uri)
     }
 
-    androidx.compose.material3.Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-    ) { _ ->
+    uiState.pendingImport?.let { bundle ->
+        ImportConfirmationDialog(
+            bundle = bundle,
+            onConfirm = viewModel::confirmImport,
+            onDismiss = viewModel::cancelImport,
+        )
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
@@ -102,7 +104,25 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
+
+            if (uiState.lastBackupLabel.isNotEmpty()) {
+                val statusColor = if (uiState.lastBackupIsStale) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.History, null, Modifier.size(16.dp), tint = statusColor)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        uiState.lastBackupLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = statusColor,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+            }
 
             // Export card
             Card(
@@ -168,22 +188,37 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(32.dp))
         }
+
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
 }
 
-private fun writeToUri(context: Context, uri: Uri, content: String): Boolean = try {
-    context.contentResolver.openOutputStream(uri)?.use { stream ->
-        stream.write(content.toByteArray(Charsets.UTF_8))
-    }
-    true
-} catch (_: Exception) {
-    false
+@Composable
+private fun ImportConfirmationDialog(
+    bundle: BackupBundle,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val entries = plural(bundle.exerciseLogs.size, "logged entry", "logged entries")
+    val walks = plural(bundle.walkingLogs.size, "walk", "walks")
+    val exportedOn = bundle.exportDate
+        .takeIf { it > 0L }
+        ?.let { " Exported ${SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(it))}." }
+        .orEmpty()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Replace all data?") },
+        text = {
+            Text(
+                "This backup contains $entries and $walks.$exportedOn\n\n" +
+                    "Restoring replaces everything currently in the app. This cannot be undone.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Restore") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
-private fun readFromUri(context: Context, uri: Uri): String? = try {
-    context.contentResolver.openInputStream(uri)?.use { stream ->
-        stream.bufferedReader(Charsets.UTF_8).readText()
-    }
-} catch (_: Exception) {
-    null
-}
+private fun plural(count: Int, singular: String, plural: String): String =
+    "$count ${if (count == 1) singular else plural}"
